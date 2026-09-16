@@ -23,10 +23,20 @@ from engine.models.pitloss import PitLossModel
 class Stint:
     compound: str
     laps: int
+    start_tyre_life: int = 1
+    """Tyre life (laps already on this set) of the first lap of the stint.
+
+    Defaults to 1 (a fresh tire). The optimizer uses values > 1 to represent
+    "continue the current stint on the tires already fitted" as one of its
+    candidate strategies, starting from the current race state rather than
+    from a fresh green flag.
+    """
 
     def __post_init__(self):
         if self.laps <= 0:
             raise ValueError(f"Stint laps must be positive, got {self.laps}")
+        if self.start_tyre_life <= 0:
+            raise ValueError(f"start_tyre_life must be positive, got {self.start_tyre_life}")
 
 
 @dataclass(frozen=True)
@@ -49,12 +59,19 @@ def simulate_strategy_once(
     pace_model: PaceModel,
     pit_loss_model: PitLossModel,
     rng: np.random.Generator,
+    start_lap_number: int = 1,
 ) -> float:
-    """Run one stochastic realization of `strategy`, return total race time (s)."""
+    """Run one stochastic realization of `strategy`, return total race time (s).
+
+    `start_lap_number` lets a strategy represent the *remainder* of a race
+    from mid-event (e.g. the optimizer evaluating "what if I pit on lap 30"),
+    rather than always starting from lap 1.
+    """
     total_time = 0.0
-    lap_number = 1
+    lap_number = start_lap_number
     for i, stint in enumerate(strategy.stints):
-        for tyre_life in range(1, stint.laps + 1):
+        for offset in range(stint.laps):
+            tyre_life = stint.start_tyre_life + offset
             total_time += pace_model.sample(
                 driver=strategy.driver,
                 compound=stint.compound,
@@ -75,12 +92,15 @@ def monte_carlo_strategy(
     pit_loss_model: PitLossModel,
     n_sims: int = 2000,
     seed: int | None = None,
+    start_lap_number: int = 1,
 ) -> np.ndarray:
     """Simulate `strategy` `n_sims` times, return an array of total race times."""
     rng = np.random.default_rng(seed)
     return np.array(
         [
-            simulate_strategy_once(strategy, pace_model, pit_loss_model, rng)
+            simulate_strategy_once(
+                strategy, pace_model, pit_loss_model, rng, start_lap_number=start_lap_number
+            )
             for _ in range(n_sims)
         ]
     )
@@ -92,6 +112,7 @@ def compare_strategies(
     pit_loss_model: PitLossModel,
     n_sims: int = 2000,
     seed: int | None = None,
+    start_lap_number: int = 1,
 ) -> pd.DataFrame:
     """Simulate each strategy and summarize + rank the resulting time distributions.
 
@@ -104,7 +125,12 @@ def compare_strategies(
     for i, strategy in enumerate(strategies):
         strategy_seed = None if seed is None else seed + i
         all_times[strategy.name] = monte_carlo_strategy(
-            strategy, pace_model, pit_loss_model, n_sims=n_sims, seed=strategy_seed
+            strategy,
+            pace_model,
+            pit_loss_model,
+            n_sims=n_sims,
+            seed=strategy_seed,
+            start_lap_number=start_lap_number,
         )
 
     # times_matrix[i, j] = strategy i's total time on simulation draw j.
