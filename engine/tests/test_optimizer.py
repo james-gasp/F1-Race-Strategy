@@ -74,12 +74,15 @@ def test_build_candidate_strategy_with_stop_has_two_stints():
 
 
 def test_generate_pit_candidates_includes_stay_out_option():
+    # Already pitted once earlier in the race (onto SOFT), now on MEDIUM --
+    # two compounds used, so "stay out" the rest of the way is legal.
     state = RaceState(
         driver="HAM",
         current_compound="MEDIUM",
         current_tyre_life=5,
         next_lap_number=10,
         total_race_laps=30,
+        compounds_used_so_far=frozenset({"SOFT"}),
     )
     candidates = generate_pit_candidates(state, lap_step=5)
     names = [c.name for c in candidates]
@@ -104,14 +107,73 @@ def test_optimizer_recommends_pitting_off_worn_soft_tires():
 
 
 def test_optimizer_recommends_staying_out_near_end_of_race():
-    # Only a handful of laps left: any pit stop costs far more than it saves.
+    # Already used HARD earlier in the race, now on MEDIUM with only a
+    # handful of laps left: two compounds already used (rule satisfied), and
+    # any further stop costs far more than it could save this late.
     state = RaceState(
         driver="HAM",
         current_compound="MEDIUM",
         current_tyre_life=15,
         next_lap_number=48,
         total_race_laps=50,
+        compounds_used_so_far=frozenset({"HARD"}),
     )
     result = optimize_pit_stop(state, MODEL, PIT, lap_step=1, n_sims=500, seed=0)
     best = result.iloc[0]
     assert "stay out" in best["strategy"]
+
+
+def test_two_compound_rule_forces_a_stop_even_late_in_the_race():
+    # Only used MEDIUM all race so far, 5 laps left: "stay out" would violate
+    # the two-compound rule, so the optimizer must recommend a (late, cheap
+    # as possible) stop instead, even though it costs time.
+    state = RaceState(
+        driver="HAM",
+        current_compound="MEDIUM",
+        current_tyre_life=40,
+        next_lap_number=46,
+        total_race_laps=50,
+    )
+    result = optimize_pit_stop(state, MODEL, PIT, lap_step=1, n_sims=500, seed=0)
+    assert "stay out" not in result.iloc[0]["strategy"]
+    assert all("stay out" not in name for name in result["strategy"])
+
+
+def test_two_compound_rule_can_be_disabled():
+    state = RaceState(
+        driver="HAM",
+        current_compound="MEDIUM",
+        current_tyre_life=40,
+        next_lap_number=46,
+        total_race_laps=50,
+        enforce_two_compound_rule=False,
+    )
+    candidates = generate_pit_candidates(state, lap_step=1)
+    assert any("stay out" in c.name for c in candidates)
+
+
+def test_no_legal_candidates_raises_clear_error():
+    # Only 1 lap left in the race, only ever used SOFT, and no time left to
+    # both pit and complete a lap on a second compound: genuinely impossible
+    # to comply with the two-compound rule from here (a real team would have
+    # needed to pit earlier).
+    state = RaceState(
+        driver="HAM",
+        current_compound="SOFT",
+        current_tyre_life=30,
+        next_lap_number=50,
+        total_race_laps=50,
+    )
+    with pytest.raises(ValueError, match="two-compound rule"):
+        generate_pit_candidates(state)
+
+
+def test_compounds_used_so_far_always_includes_current_compound():
+    state = RaceState(
+        driver="HAM",
+        current_compound="MEDIUM",
+        current_tyre_life=5,
+        next_lap_number=10,
+        total_race_laps=30,
+    )
+    assert state.compounds_used_so_far == frozenset({"MEDIUM"})
