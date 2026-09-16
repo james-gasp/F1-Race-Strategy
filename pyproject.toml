@@ -22,6 +22,10 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["engine/tests", "api/tests"]
+addopts = "-m 'not integration'"
+markers = [
+    "integration: hits the real FastF1 API; needs network, run explicitly with -m integration",
+]
 
 [tool.ruff]
 line-length = 100
