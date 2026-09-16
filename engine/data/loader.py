@@ -91,6 +91,28 @@ def load_race_laps(race: RaceIdentifier) -> pd.DataFrame:
     return out.sort_values(["driver", "lap_number"]).reset_index(drop=True)
 
 
+def load_race_results(race: RaceIdentifier) -> pd.DataFrame:
+    """Load starting grid position, finishing position, and status for a race.
+
+    Output columns: driver, team, grid_position, finish_position, status.
+    `finish_position` is NaN for retirements (use `status` to check).
+    """
+    ensure_cache()
+    session = fastf1.get_session(race.year, race.event, "R")
+    session.load(telemetry=False, weather=False, messages=False)
+
+    results = session.results
+    return pd.DataFrame(
+        {
+            "driver": results["Abbreviation"],
+            "team": results["TeamName"],
+            "grid_position": results["GridPosition"].astype(int),
+            "finish_position": results["Position"],
+            "status": results["Status"],
+        }
+    ).reset_index(drop=True)
+
+
 def clean_pace_laps(laps: pd.DataFrame) -> pd.DataFrame:
     """Filter to laps suitable for fitting a tire degradation / pace model.
 
