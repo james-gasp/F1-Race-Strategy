@@ -8,6 +8,7 @@ stays testable without needing network access or a live FastF1 session.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 import fastf1
@@ -32,6 +33,17 @@ def ensure_cache(cache_dir: Path = DEFAULT_CACHE_DIR) -> None:
 class RaceIdentifier:
     year: int
     event: str  # circuit/event name or round number, anything fastf1.get_session accepts
+
+
+@lru_cache(maxsize=16)
+def _load_session(year: int, event: str):
+    """Fetch + process a race session once per process, shared by
+    `load_race_laps` and `load_race_results` so requesting both for the same
+    race doesn't re-run FastF1's (CPU-bound) timing data processing twice."""
+    ensure_cache()
+    session = fastf1.get_session(year, event, "R")
+    session.load(telemetry=False, weather=False, messages=False)
+    return session
 
 
 LAP_COLUMNS = [
@@ -61,9 +73,7 @@ def load_race_laps(race: RaceIdentifier) -> pd.DataFrame:
     `lap_time_s` is a float number of seconds (NaN for in/out laps with no
     recorded time). `is_pit_lap` is True for the lap a driver pitted on.
     """
-    ensure_cache()
-    session = fastf1.get_session(race.year, race.event, "R")
-    session.load(telemetry=False, weather=False, messages=False)
+    session = _load_session(race.year, race.event)
 
     laps = session.laps[LAP_COLUMNS].copy()
 
@@ -97,9 +107,7 @@ def load_race_results(race: RaceIdentifier) -> pd.DataFrame:
     Output columns: driver, team, grid_position, finish_position, status.
     `finish_position` is NaN for retirements (use `status` to check).
     """
-    ensure_cache()
-    session = fastf1.get_session(race.year, race.event, "R")
-    session.load(telemetry=False, weather=False, messages=False)
+    session = _load_session(race.year, race.event)
 
     results = session.results
     return pd.DataFrame(
