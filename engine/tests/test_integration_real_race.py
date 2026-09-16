@@ -21,7 +21,7 @@ pytestmark = pytest.mark.integration
 def real_race_laps():
     try:
         return load_race_laps(RaceIdentifier(2023, "Silverstone"))
-    except Exception as exc:  # network/API unavailable
+    except Exception as exc:  # noqa: BLE001 - any failure here means "skip, no network"
         pytest.skip(f"FastF1 data unavailable: {exc}")
 
 

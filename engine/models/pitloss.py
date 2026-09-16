@@ -23,8 +23,13 @@ from engine.models.pace import PaceModel
 @dataclass(frozen=True)
 class PitLossModel:
     pit_loss_s: float
+    pit_loss_std: float
     n_stops_observed: int
     per_stop_losses: tuple[float, ...]
+
+    def sample(self, rng: np.random.Generator) -> float:
+        """A single stochastic pit stop duration for Monte Carlo simulation."""
+        return float(max(0.0, self.pit_loss_s + rng.normal(0.0, self.pit_loss_std)))
 
 
 def _find_pit_events(laps: pd.DataFrame) -> list[tuple[str, int, int]]:
@@ -85,6 +90,7 @@ def fit_pit_loss_model(laps: pd.DataFrame, pace_model: PaceModel) -> PitLossMode
 
     return PitLossModel(
         pit_loss_s=float(np.median(per_stop_losses)),
+        pit_loss_std=float(np.std(per_stop_losses)) if len(per_stop_losses) > 1 else 0.0,
         n_stops_observed=len(per_stop_losses),
         per_stop_losses=tuple(per_stop_losses),
     )
