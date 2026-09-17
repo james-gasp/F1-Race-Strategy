@@ -21,3 +21,6 @@ frontend/.vite/
 # OS
 .DS_Store
 plan.txt
+
+# Local tooling config (not part of the project)
+.claude/
