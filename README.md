@@ -3,75 +3,9 @@
 A Formula 1 race strategy simulator that goes beyond a single car's lap time:
 it fits tire degradation, fuel burn-off, and pit-loss models from real
 telemetry, then runs Monte Carlo simulations of the **whole field** to
-produce finishing-position probabilities and a live pit-stop optimizer —
-the kind of tool a strategy team actually uses.
+produce finishing-position probabilities and a live pit-stop optimizer.
 
-Built to demonstrate three things together: the statistical modeling of a
-data science project, the strategic reasoning of a race strategy tool, and
-the engineering of a properly separated, typed, tested system rather than a
-single notebook script.
-
-## Key result
-
-Every claim below is reproducible from real 2023 British Grand Prix
-(Silverstone) data — nothing here is hand-tuned:
-
-- **Field simulation accuracy**: simulating all 17 race finishers together,
-  using only their actual historical strategies run through the fitted pace
-  and pit-loss models (no hand-coded team strengths), the resulting expected
-  finishing order has a **0.94 Spearman correlation** with the real result.
-  The model correctly makes Max Verstappen the clear favorite (44.6% win
-  probability, 73.0% podium probability) — he won.
-- **Pit stop optimizer**: given Verstappen's actual mid-race state at lap 26
-  (15 laps into a MEDIUM stint, hasn't pitted yet), the optimizer searches
-  every legal pit lap × compound combination and its top recommendation is
-  **pit after lap 34** — the exact lap he pitted on in the real race.
-- **Regulatory correctness**: the optimizer enforces F1's mandatory
-  two-compound rule. Without it, the model can recommend "never pit again"
-  whenever the current tire's fitted degradation happens to be mild — a real
-  bug that was caught and fixed by validating against live data, not just
-  unit tests.
-
-## Architecture
-
-```
-engine/            pure Python simulation core — no web framework dependencies,
-                    independently testable, this is where the statistical/
-                    strategic substance lives
-  data/loader.py      FastF1 session -> clean lap-by-lap DataFrame
-  models/pace.py       OLS fit: lap_time ~ driver + compound + fuel burn-off
-                        (lap_number) + per-compound tire degradation (tyre_life,
-                        tyre_life^2) -- separable because tyre_life resets every
-                        stint while lap_number is monotonic across the race
-  models/pitloss.py    pit lane time loss, from the delta between actual and
-                        model-predicted in/out-lap times
-  strategy/simulate.py  Monte Carlo simulation of one strategy; compares
-                         multiple strategies with a per-draw win probability
-  strategy/field.py     simulates the whole grid together -> finishing
-                         position probability distributions
-  optimize/optimizer.py  mid-race "should I pit now, and on what tire" search,
-                          constrained to strategies that satisfy F1's
-                          two-compound regulation
-
-api/              FastAPI layer -- a thin, typed contract over the engine
-  context.py        per-race model fitting, cached in-process
-  schemas/            Pydantic request/response models (the frontend's type
-                       contract)
-  routers/             /races, /strategy/simulate, /compare, /optimize, /field
-
-frontend/         React + TypeScript (Vite) dashboard
-  src/api/           typed fetch client mirroring the Pydantic schemas
-  src/components/      race selector, strategy builder, results charts
-                        (recharts), field simulation, pit stop optimizer
-  src/pages/            page-level state and data flow
-```
-
-The engine has no web dependencies on purpose: it's independently testable
-and readable without wading through API or UI code, and it's the part that
-actually demonstrates the modeling work. The API is a thin typed boundary.
-The frontend was built last, after the engine and API were already complete
-and demoable through Swagger UI alone — so the project never depended on the
-frontend being finished to be a working product.
+Planning on updating this project to add more features and more realistic.
 
 ## How the model works
 
@@ -94,25 +28,6 @@ frontend being finished to be a working product.
    age), it searches candidate pit laps and compounds, drops any candidate
    that wouldn't satisfy F1's two-compound rule by race end, and ranks the
    rest by expected remaining race time.
-
-## Known limitations
-
-These are deliberate MVP scope decisions, not oversights:
-
-- **No explicit overtaking/traffic model** — the field simulation ranks
-  finishing order purely by total race time, equivalent to assuming a pace
-  advantage always converts to track position. A probabilistic
-  overtake-difficulty adjustment is a natural extension.
-- **DNFs are excluded from field simulation** — the model doesn't simulate
-  mechanical failures or accidents, so only finishers are compared.
-- **No safety car / VSC probability modeling yet** — track status is loaded
-  and available (`engine/data/loader.py:safety_car_laps`), but the optimizer
-  doesn't yet weight pit timing against SC/VSC probability.
-- **No ML degradation model yet** — degradation is a per-compound linear +
-  quadratic OLS fit, not a gradient-boosted model with feature importance.
-- **No historical backtest/replay UI yet** — the engine can already answer
-  "what would the optimizer have recommended at any point in a real race,"
-  but there's no dedicated replay view for it.
 
 ## Getting started
 
@@ -159,9 +74,3 @@ Unit tests use synthetic data with known ground-truth coefficients so they
 run offline and deterministically; integration tests validate the full
 pipeline against real race data and are run separately (they need network
 access to FastF1 on first run).
-
-## Tech stack
-
-Python 3.12, [FastF1](https://docs.fastf1.dev/), pandas, NumPy, SciPy,
-FastAPI, Pydantic, pytest, [uv](https://docs.astral.sh/uv/) — React 19,
-TypeScript, Vite, Recharts, oxlint.
