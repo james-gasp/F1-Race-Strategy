@@ -1,5 +1,5 @@
-import Dashboard from "./pages/Dashboard";
+import RaceControl from "./pages/RaceControl";
 
 export default function App() {
-  return <Dashboard />;
+  return <RaceControl />;
 }

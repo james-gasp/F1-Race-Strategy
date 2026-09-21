@@ -82,3 +82,70 @@ export interface FieldResponse {
 export interface ApiErrorBody {
   detail: string;
 }
+
+export interface CircuitOutline {
+  points: [number, number][];
+  length_m: number;
+}
+
+export interface UndercutThreat {
+  gap_s: number;
+  pit_loss_s: number;
+  est_pace_gain_per_lap_s: number;
+  laps_to_undercut: number | null;
+  is_threat: boolean;
+}
+
+export interface DriverFrame {
+  driver: string;
+  team: string;
+  position: number | null;
+  gap_to_leader_s: number | null;
+  gap_ahead_s: number | null;
+  compound: string | null;
+  tyre_life: number | null;
+  stint: number | null;
+  pit_this_lap: boolean;
+  sector1_s: number | null;
+  sector2_s: number | null;
+  sector3_s: number | null;
+  undercut_threat: UndercutThreat | null;
+}
+
+export interface LapFrame {
+  lap_number: number;
+  drivers: DriverFrame[];
+}
+
+export interface ReplayResponse {
+  total_laps: number;
+  frames: LapFrame[];
+}
+
+export interface TelemetryPoint {
+  time_s: number;
+  x: number;
+  y: number;
+  speed_kmh: number;
+}
+
+export interface DriverTelemetry {
+  driver: string;
+  lap_number: number;
+  points: TelemetryPoint[];
+}
+
+export interface WeatherSample {
+  time_s: number;
+  lap_number: number | null;
+  air_temp_c: number;
+  track_temp_c: number;
+  humidity_pct: number;
+  rainfall: boolean;
+  wind_speed_kmh: number;
+  wind_direction_deg: number;
+}
+
+export interface WeatherResponse {
+  samples: WeatherSample[];
+}

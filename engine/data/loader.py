@@ -36,13 +36,19 @@ class RaceIdentifier:
 
 
 @lru_cache(maxsize=16)
-def _load_session(year: int, event: str):
+def _load_session(year: int, event: str, *, telemetry: bool = False, weather: bool = False):
     """Fetch + process a race session once per process, shared by
     `load_race_laps` and `load_race_results` so requesting both for the same
-    race doesn't re-run FastF1's (CPU-bound) timing data processing twice."""
+    race doesn't re-run FastF1's (CPU-bound) timing data processing twice.
+
+    `telemetry`/`weather` are part of the cache key (via `lru_cache`), so a
+    laps-only call and a telemetry call for the same race are cached and kept
+    independently — existing callers that only need laps stay on the cheap
+    path and don't pay for telemetry they never asked for.
+    """
     ensure_cache()
     session = fastf1.get_session(year, event, "R")
-    session.load(telemetry=False, weather=False, messages=False)
+    session.load(telemetry=telemetry, weather=weather, messages=False)
     return session
 
 
@@ -60,6 +66,10 @@ LAP_COLUMNS = [
     "TrackStatus",
     "Position",
     "IsAccurate",
+    "Sector1Time",
+    "Sector2Time",
+    "Sector3Time",
+    "Time",
 ]
 
 
@@ -68,10 +78,15 @@ def load_race_laps(race: RaceIdentifier) -> pd.DataFrame:
 
     Output columns (one row per driver-lap):
         driver, team, lap_number, lap_time_s, compound, tyre_life, fresh_tyre,
-        stint, is_pit_lap, track_status, position
+        stint, is_pit_lap, track_status, position, sector1_s, sector2_s, sector3_s,
+        lap_end_time_s
 
     `lap_time_s` is a float number of seconds (NaN for in/out laps with no
     recorded time). `is_pit_lap` is True for the lap a driver pitted on.
+    Sector times come straight off `session.laps` and don't require telemetry.
+    `lap_end_time_s` is the cumulative session time (seconds since session
+    start) at which the lap was completed — used to compute gaps between
+    drivers at the same lap number.
     """
     session = _load_session(race.year, race.event)
 
@@ -96,9 +111,90 @@ def load_race_laps(race: RaceIdentifier) -> pd.DataFrame:
             "is_accurate": laps["IsAccurate"],
             "track_status": laps["TrackStatus"],
             "position": laps["Position"],
+            "sector1_s": laps["Sector1Time"].dt.total_seconds(),
+            "sector2_s": laps["Sector2Time"].dt.total_seconds(),
+            "sector3_s": laps["Sector3Time"].dt.total_seconds(),
+            "lap_end_time_s": laps["Time"].dt.total_seconds(),
         }
     )
     return out.sort_values(["driver", "lap_number"]).reset_index(drop=True)
+
+
+def load_weather(race: RaceIdentifier) -> pd.DataFrame:
+    """Load weather/track-condition samples for a race session.
+
+    Output columns: time_s (seconds from session start), air_temp_c,
+    track_temp_c, humidity_pct, rainfall, wind_speed_kmh, wind_direction_deg.
+    """
+    session = _load_session(race.year, race.event, weather=True)
+    weather = session.weather_data
+    return pd.DataFrame(
+        {
+            "time_s": weather["Time"].dt.total_seconds(),
+            "air_temp_c": weather["AirTemp"],
+            "track_temp_c": weather["TrackTemp"],
+            "humidity_pct": weather["Humidity"],
+            "rainfall": weather["Rainfall"],
+            "wind_speed_kmh": weather["WindSpeed"],
+            "wind_direction_deg": weather["WindDirection"],
+        }
+    ).reset_index(drop=True)
+
+
+def _telemetry_for_one_driver(session, driver: str) -> pd.DataFrame:
+    """Fetch one driver's whole-session telemetry in a single bulk call
+    (`Laps.get_telemetry()`), then tag each sample with its lap number via
+    an as-of join against each lap's start time — much faster than calling
+    `get_telemetry()` once per lap."""
+    drv_laps = session.laps.pick_drivers(driver)
+    tel = drv_laps.get_telemetry()
+    if tel.empty:
+        return pd.DataFrame(
+            columns=["driver", "lap_number", "time_s", "x", "y", "speed_kmh", "distance_m"]
+        )
+
+    lap_starts = drv_laps[["LapNumber", "LapStartTime"]].dropna().sort_values("LapStartTime")
+    tel = tel.sort_values("SessionTime")
+    tagged = pd.merge_asof(
+        tel,
+        lap_starts.rename(columns={"LapStartTime": "SessionTime"}),
+        on="SessionTime",
+        direction="backward",
+    )
+
+    return pd.DataFrame(
+        {
+            "driver": driver,
+            "lap_number": tagged["LapNumber"].astype("Int64"),
+            "time_s": tagged["SessionTime"].dt.total_seconds(),
+            "x": tagged["X"],
+            "y": tagged["Y"],
+            "speed_kmh": tagged["Speed"],
+            "distance_m": tagged["Distance"],
+        }
+    ).dropna(subset=["lap_number"]).reset_index(drop=True)
+
+
+def load_car_telemetry(race: RaceIdentifier, driver: str | None = None) -> pd.DataFrame:
+    """Load per-lap car position/speed telemetry.
+
+    `driver=None` loads every driver (expensive — full-session telemetry, one
+    bulk fetch per car); pass a driver code (e.g. "VER") to scope the fetch to
+    one car, which is all a circuit-outline extraction needs.
+
+    Output columns: driver, lap_number, time_s (session-relative), x, y,
+    speed_kmh, distance_m (distance traveled within the lap).
+    """
+    session = _load_session(race.year, race.event, telemetry=True)
+    drivers = [driver] if driver is not None else sorted(session.laps["Driver"].unique())
+
+    frames = [_telemetry_for_one_driver(session, d) for d in drivers]
+    frames = [f for f in frames if not f.empty]
+    if not frames:
+        return pd.DataFrame(
+            columns=["driver", "lap_number", "time_s", "x", "y", "speed_kmh", "distance_m"]
+        )
+    return pd.concat(frames, ignore_index=True)
 
 
 def load_race_results(race: RaceIdentifier) -> pd.DataFrame:

@@ -1,10 +1,14 @@
 import type {
   ApiErrorBody,
+  CircuitOutline,
   CompareResponse,
+  DriverTelemetry,
   FieldResponse,
   OptimizeResponse,
   RaceSummary,
+  ReplayResponse,
   StrategyIn,
+  WeatherResponse,
 } from "./types";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
@@ -66,4 +70,27 @@ export function simulateField(params: {
   seed?: number;
 }): Promise<FieldResponse> {
   return request("/strategy/field", { method: "POST", body: JSON.stringify(params) });
+}
+
+export function getCircuitOutline(year: number, event: string): Promise<CircuitOutline> {
+  return request(`/races/${year}/${encodeURIComponent(event)}/circuit`);
+}
+
+export function getReplayFrames(year: number, event: string): Promise<ReplayResponse> {
+  return request(`/races/${year}/${encodeURIComponent(event)}/replay/frames`);
+}
+
+export function getDriverLapTelemetry(
+  year: number,
+  event: string,
+  driver: string,
+  lap: number,
+): Promise<DriverTelemetry> {
+  return request(
+    `/races/${year}/${encodeURIComponent(event)}/replay/telemetry?driver=${driver}&lap=${lap}`,
+  );
+}
+
+export function getWeather(year: number, event: string): Promise<WeatherResponse> {
+  return request(`/races/${year}/${encodeURIComponent(event)}/weather`);
 }

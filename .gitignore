@@ -8,6 +8,7 @@ __pycache__/
 
 # FastF1 cache (large, regenerable)
 .fastf1_cache/
+.circuit_cache/
 
 # Node / frontend
 node_modules/

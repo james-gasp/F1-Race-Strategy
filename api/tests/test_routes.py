@@ -164,3 +164,45 @@ def test_field_simulation_returns_probabilities_for_finishers(client):
     assert drivers[0]["driver"] == "VER"  # VER should come out as the expected favorite
     for d in drivers:
         assert abs(sum(d["position_probabilities"].values()) - 1.0) < 1e-9
+
+
+def test_get_circuit_returns_a_resampled_outline(client):
+    resp = client.get(f"/races/{YEAR}/{EVENT}/circuit")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["points"]) > 100
+    assert body["length_m"] > 1000  # every F1 circuit is several km
+
+
+def test_get_replay_frames_covers_the_full_race(client, race_summary):
+    resp = client.get(f"/races/{YEAR}/{EVENT}/replay/frames")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total_laps"] == race_summary["total_race_laps"]
+    assert len(body["frames"]) == body["total_laps"]
+
+    mid_lap = body["frames"][10]
+    leader = mid_lap["drivers"][0]
+    assert leader["position"] == 1
+    assert leader["gap_to_leader_s"] == 0.0
+    assert leader["gap_ahead_s"] is None
+    if len(mid_lap["drivers"]) > 1:
+        chaser = mid_lap["drivers"][1]
+        assert chaser["gap_to_leader_s"] > 0
+
+
+def test_get_replay_telemetry_returns_points_for_a_lap(client):
+    resp = client.get(f"/races/{YEAR}/{EVENT}/replay/telemetry", params={"driver": "VER", "lap": 5})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["driver"] == "VER"
+    assert body["lap_number"] == 5
+    assert len(body["points"]) > 10
+
+
+def test_get_weather_joins_samples_to_lap_numbers(client):
+    resp = client.get(f"/races/{YEAR}/{EVENT}/weather")
+    assert resp.status_code == 200
+    samples = resp.json()["samples"]
+    assert len(samples) > 0
+    assert any(s["lap_number"] is not None for s in samples)

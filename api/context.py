@@ -13,7 +13,15 @@ from functools import lru_cache
 
 import pandas as pd
 
-from engine.data.loader import RaceIdentifier, clean_pace_laps, load_race_laps, load_race_results
+from engine.data.circuit import CircuitOutline, load_or_build_circuit_outline
+from engine.data.loader import (
+    RaceIdentifier,
+    clean_pace_laps,
+    load_car_telemetry,
+    load_race_laps,
+    load_race_results,
+    load_weather,
+)
 from engine.models.pace import PaceModel, fit_pace_model
 from engine.models.pitloss import PitLossModel, fit_pit_loss_model
 
@@ -41,3 +49,23 @@ def get_race_context(year: int, event: str) -> RaceContext:
     return RaceContext(
         race=race, laps=laps, results=results, pace_model=pace_model, pit_loss_model=pit_loss_model
     )
+
+
+# Telemetry/circuit/weather are cached separately from `RaceContext` (and
+# lazily, via their own `lru_cache`) so the cheap, laps-only endpoints that
+# already depend on `get_race_context` don't pay for telemetry they don't need.
+
+
+@lru_cache(maxsize=16)
+def get_circuit_outline(year: int, event: str) -> CircuitOutline:
+    return load_or_build_circuit_outline(RaceIdentifier(year=year, event=event))
+
+
+@lru_cache(maxsize=16)
+def get_weather(year: int, event: str) -> pd.DataFrame:
+    return load_weather(RaceIdentifier(year=year, event=event))
+
+
+@lru_cache(maxsize=32)
+def get_driver_telemetry(year: int, event: str, driver: str) -> pd.DataFrame:
+    return load_car_telemetry(RaceIdentifier(year=year, event=event), driver=driver)

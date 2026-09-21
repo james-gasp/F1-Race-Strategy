@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routers import races, strategy
+from api.routers import races, replay, strategy
 
 app = FastAPI(
     title="F1 Race Strategy Simulator API",
@@ -20,6 +20,7 @@ app.add_middleware(
 
 app.include_router(races.router)
 app.include_router(strategy.router)
+app.include_router(replay.router)
 
 
 @app.get("/health", tags=["health"])

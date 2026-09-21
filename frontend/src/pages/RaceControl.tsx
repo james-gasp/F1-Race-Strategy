@@ -10,10 +10,15 @@ import FieldPanel from "../components/FieldPanel";
 import OptimizerPanel from "../components/OptimizerPanel";
 import RaceSelector from "../components/RaceSelector";
 import RaceSummaryPanel from "../components/RaceSummaryPanel";
+import ReplayControls from "../components/ReplayControls";
 import StrategyBuilder from "../components/StrategyBuilder";
 import StrategyResultsPanel from "../components/StrategyResultsPanel";
+import TimingTower from "../components/TimingTower";
+import TrackMap from "../components/TrackMap";
+import WeatherPanel from "../components/WeatherPanel";
+import { ReplayProvider } from "../context/ReplayContext";
 
-export default function Dashboard() {
+export default function RaceControl() {
   const [race, setRace] = useState<RaceSummary | null>(null);
   const [raceLoading, setRaceLoading] = useState(false);
   const [raceError, setRaceError] = useState<string | null>(null);
@@ -110,32 +115,59 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="dashboard">
-      <header className="app-header">
-        <h1>F1 Race Strategy Simulator</h1>
-        <p>FastF1-calibrated Monte Carlo strategy simulation and optimization.</p>
-      </header>
+    <ReplayProvider year={race?.year ?? null} event={race?.event ?? null}>
+      <div className="mx-auto flex max-w-[1400px] flex-col gap-5 px-4 pb-16 pt-6">
+        <header className="app-header flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <span className="eyebrow">Race Control · Pit Wall</span>
+            <h1 className="m-0">F1 Race Control</h1>
+            <p className="m-0">
+              FastF1-calibrated race replay, live pit-wall telemetry, and Monte Carlo strategy simulation.
+            </p>
+          </div>
+        </header>
 
-      <RaceSelector onLoad={loadRace} loading={raceLoading} />
-      {raceError && <p className="error-text">{raceError}</p>}
+        <RaceSelector onLoad={loadRace} loading={raceLoading} />
+        {raceError && <p className="error-text">{raceError}</p>}
 
-      {race && (
-        <>
-          <RaceSummaryPanel race={race} />
-          <StrategyBuilder race={race} onCompare={handleCompare} loading={compareLoading} />
-          {compareError && <p className="error-text">{compareError}</p>}
-          <StrategyResultsPanel results={compareResults} />
-          <FieldPanel onSimulate={handleSimulateField} loading={fieldLoading} results={fieldResults} />
-          <OptimizerPanel
-            race={race}
-            onOptimize={handleOptimize}
-            loading={optLoading}
-            error={optError}
-            recommended={optRecommended}
-            candidates={optCandidates}
-          />
-        </>
-      )}
-    </div>
+        {race && (
+          <>
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
+              <div className="lg:col-span-8">
+                <TrackMap />
+              </div>
+              <div className="lg:col-span-4">
+                <WeatherPanel />
+              </div>
+            </div>
+
+            <ReplayControls />
+
+            <TimingTower />
+
+            <section>
+              <h2 className="mb-3 mt-2 border-l-3 border-(--accent) pl-2.5 text-[0.8rem] font-bold uppercase tracking-[0.08em] text-(--text)">
+                Strategy Lab
+              </h2>
+              <div className="flex flex-col gap-5">
+                <RaceSummaryPanel race={race} />
+                <StrategyBuilder race={race} onCompare={handleCompare} loading={compareLoading} />
+                {compareError && <p className="error-text">{compareError}</p>}
+                <StrategyResultsPanel results={compareResults} />
+                <FieldPanel race={race} onSimulate={handleSimulateField} loading={fieldLoading} results={fieldResults} />
+                <OptimizerPanel
+                  race={race}
+                  onOptimize={handleOptimize}
+                  loading={optLoading}
+                  error={optError}
+                  recommended={optRecommended}
+                  candidates={optCandidates}
+                />
+              </div>
+            </section>
+          </>
+        )}
+      </div>
+    </ReplayProvider>
   );
 }
