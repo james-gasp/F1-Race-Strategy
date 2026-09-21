@@ -42,7 +42,7 @@ export default function FieldPanel({ race, onSimulate, loading, results }: Props
                 type="category"
                 dataKey="driver"
                 width={50}
-                tick={(props) => <DriverTick {...props} color={teamColor(driverTeam[props.payload.value])} />}
+                tick={(props) => <DriverTick {...props} color={teamColor(driverTeam[props.payload?.value ?? ""])} />}
               />
               <Tooltip
                 cursor={{ fill: "rgba(255, 255, 255, 0.04)" }}
@@ -82,23 +82,33 @@ export default function FieldPanel({ race, onSimulate, loading, results }: Props
   );
 }
 
-function DriverTick({ x, y, payload, color }: { x: number; y: number; payload: { value: string }; color: string }) {
+function DriverTick({
+  x,
+  y,
+  payload,
+  color,
+}: {
+  x?: number | string;
+  y?: number | string;
+  payload?: { value: string };
+  color: string;
+}) {
   return (
     <text x={x} y={y} dy={4} textAnchor="end" fill={color} fontSize={12} fontWeight={700}>
-      {payload.value}
+      {payload?.value}
     </text>
   );
 }
 
 interface FieldTooltipProps {
   active?: boolean;
-  payload?: { payload: DriverPositionProbability }[];
+  payload?: readonly { payload?: DriverPositionProbability }[];
   driverTeam: Record<string, string>;
 }
 
 function FieldTooltip({ active, payload, driverTeam }: FieldTooltipProps) {
-  if (!active || !payload || payload.length === 0) return null;
-  const d = payload[0].payload;
+  const d = payload?.[0]?.payload;
+  if (!active || !d) return null;
   const color = teamColor(driverTeam[d.driver]);
   return (
     <div

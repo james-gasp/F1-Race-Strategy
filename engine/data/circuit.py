@@ -36,7 +36,7 @@ class CircuitOutline:
         return {"points": [list(p) for p in self.points], "length_m": self.length_m}
 
     @classmethod
-    def from_dict(cls, data: dict) -> "CircuitOutline":
+    def from_dict(cls, data: dict) -> CircuitOutline:
         return cls(
             points=tuple((float(x), float(y)) for x, y in data["points"]),
             length_m=float(data["length_m"]),
