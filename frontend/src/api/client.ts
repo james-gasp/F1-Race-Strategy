@@ -7,6 +7,7 @@ import type {
   OptimizeResponse,
   RaceSummary,
   ReplayResponse,
+  SeasonResponse,
   StrategyIn,
   WeatherResponse,
 } from "./types";
@@ -31,6 +32,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(res.status, body?.detail ?? res.statusText);
   }
   return res.json() as Promise<T>;
+}
+
+export function getSeason(year: number): Promise<SeasonResponse> {
+  return request(`/races/${year}`);
 }
 
 export function getRace(year: number, event: string): Promise<RaceSummary> {

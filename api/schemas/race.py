@@ -34,3 +34,16 @@ class RaceSummaryOut(BaseModel):
     pit_loss_s: float
     pace_model: PaceModelSummaryOut
     drivers: list[DriverSummaryOut]
+
+
+class SeasonRaceOut(BaseModel):
+    round: int
+    event_name: str
+    location: str
+    country: str
+    race_date: str  # ISO date (UTC) of the race start
+
+
+class SeasonOut(BaseModel):
+    year: int
+    races: list[SeasonRaceOut]

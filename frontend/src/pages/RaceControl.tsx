@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ApiError, compareStrategies, getRace, optimizePitStop, simulateField } from "../api/client";
 import type {
   DriverPositionProbability,
@@ -17,11 +17,19 @@ import TimingTower from "../components/TimingTower";
 import TrackMap from "../components/TrackMap";
 import WeatherPanel from "../components/WeatherPanel";
 import { ReplayProvider } from "../context/ReplayContext";
+import AppShell from "../components/AppShell";
+import type { View } from "../components/AppShell";
+import TelemetryView from "./TelemetryView";
 
 export default function RaceControl() {
   const [race, setRace] = useState<RaceSummary | null>(null);
-  const [raceLoading, setRaceLoading] = useState(false);
+  const [pendingRace, setPendingRace] = useState<{ year: number; event: string } | null>(null);
+  const raceLoading = pendingRace != null;
+  // Bumped on every race load; any response (race or simulation) that comes
+  // back after the user has moved on to another race is dropped.
+  const loadId = useRef(0);
   const [raceError, setRaceError] = useState<string | null>(null);
+  const [view, setView] = useState<View>("telemetry");
 
   const [compareResults, setCompareResults] = useState<StrategyResult[]>([]);
   const [compareLoading, setCompareLoading] = useState(false);
@@ -36,7 +44,8 @@ export default function RaceControl() {
   const [optError, setOptError] = useState<string | null>(null);
 
   const loadRace = async (year: number, event: string) => {
-    setRaceLoading(true);
+    const id = ++loadId.current;
+    setPendingRace({ year, event });
     setRaceError(null);
     setCompareResults([]);
     setFieldResults(null);
@@ -44,17 +53,19 @@ export default function RaceControl() {
     setOptCandidates(null);
     try {
       const summary = await getRace(year, event);
+      if (id !== loadId.current) return;
       setRace(summary);
     } catch (err) {
+      if (id !== loadId.current) return;
       setRaceError(err instanceof ApiError ? err.message : "Failed to load race");
-      setRace(null);
     } finally {
-      setRaceLoading(false);
+      if (id === loadId.current) setPendingRace(null);
     }
   };
 
   const handleCompare = async (strategies: StrategyIn[]) => {
     if (!race) return;
+    const id = loadId.current;
     setCompareLoading(true);
     setCompareError(null);
     try {
@@ -65,7 +76,7 @@ export default function RaceControl() {
         n_sims: 2000,
         seed: 0,
       });
-      setCompareResults(res.results);
+      if (id === loadId.current) setCompareResults(res.results);
     } catch (err) {
       setCompareError(err instanceof ApiError ? err.message : "Comparison failed");
     } finally {
@@ -75,10 +86,11 @@ export default function RaceControl() {
 
   const handleSimulateField = async () => {
     if (!race) return;
+    const id = loadId.current;
     setFieldLoading(true);
     try {
       const res = await simulateField({ year: race.year, event: race.event, n_sims: 2000, seed: 0 });
-      setFieldResults(res.drivers);
+      if (id === loadId.current) setFieldResults(res.drivers);
     } finally {
       setFieldLoading(false);
     }
@@ -91,6 +103,7 @@ export default function RaceControl() {
     next_lap_number: number;
   }) => {
     if (!race) return;
+    const id = loadId.current;
     setOptLoading(true);
     setOptError(null);
     setOptRecommended(null);
@@ -105,6 +118,7 @@ export default function RaceControl() {
         n_sims: 1000,
         seed: 0,
       });
+      if (id !== loadId.current) return;
       setOptRecommended(res.recommended);
       setOptCandidates(res.candidates);
     } catch (err) {
@@ -116,58 +130,76 @@ export default function RaceControl() {
 
   return (
     <ReplayProvider year={race?.year ?? null} event={race?.event ?? null}>
-      <div className="mx-auto flex max-w-[1400px] flex-col gap-5 px-4 pb-16 pt-6">
-        <header className="app-header flex flex-wrap items-baseline justify-between gap-2">
-          <div>
-            <span className="eyebrow">Race Control · Pit Wall</span>
-            <h1 className="m-0">F1 Race Control</h1>
-            <p className="m-0">
-              FastF1-calibrated race replay, live pit-wall telemetry, and Monte Carlo strategy simulation.
-            </p>
+      <AppShell race={race} view={view} onView={setView} onLoadRace={loadRace} raceLoading={raceLoading}>
+        {raceError && <p className="error-text mb-3">{raceError}</p>}
+
+        {pendingRace && race && (
+          <div className="race-loading">
+            <span className="spinner" />
+            <div>
+              <strong>
+                Loading {pendingRace.event} {pendingRace.year}…
+              </strong>
+              <p className="hint m-0">
+                The first load of a race downloads its timing data from FastF1 and can take up to a minute.
+              </p>
+            </div>
           </div>
-        </header>
+        )}
 
-        <RaceSelector onLoad={loadRace} loading={raceLoading} />
-        {raceError && <p className="error-text">{raceError}</p>}
+        {!race && (
+          <div className="landing">
+            <span className="eyebrow">Race Control · Pit Wall</span>
+            <h1>Analyse every lap like a race engineer.</h1>
+            <p>
+              Overlay real FastF1 telemetry lap-against-lap, replay the race from the pit wall, and
+              run Monte Carlo strategy simulations for the whole field.
+            </p>
+            <RaceSelector onLoad={loadRace} loading={raceLoading} />
+            {pendingRace && (
+              <p className="hint m-0 flex items-center gap-2">
+                <span className="spinner" /> Loading {pendingRace.event} {pendingRace.year}… the first load of a race
+                downloads its data from FastF1 and can take up to a minute.
+              </p>
+            )}
+          </div>
+        )}
 
-        {race && (
-          <>
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
+        {race && !pendingRace && view === "telemetry" && <TelemetryView race={race} />}
+
+        {race && !pendingRace && view === "timing" && (
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
               <div className="lg:col-span-8">
-                <TrackMap />
+                <TrackMap drivers={race.drivers} />
               </div>
-              <div className="lg:col-span-4">
+              <div className="flex flex-col gap-4 lg:col-span-4">
                 <WeatherPanel />
+                <ReplayControls />
               </div>
             </div>
-
-            <ReplayControls />
-
             <TimingTower />
-
-            <section>
-              <h2 className="mb-3 mt-2 border-l-3 border-(--accent) pl-2.5 text-[0.8rem] font-bold uppercase tracking-[0.08em] text-(--text)">
-                Strategy Lab
-              </h2>
-              <div className="flex flex-col gap-5">
-                <RaceSummaryPanel race={race} />
-                <StrategyBuilder race={race} onCompare={handleCompare} loading={compareLoading} />
-                {compareError && <p className="error-text">{compareError}</p>}
-                <StrategyResultsPanel results={compareResults} />
-                <FieldPanel race={race} onSimulate={handleSimulateField} loading={fieldLoading} results={fieldResults} />
-                <OptimizerPanel
-                  race={race}
-                  onOptimize={handleOptimize}
-                  loading={optLoading}
-                  error={optError}
-                  recommended={optRecommended}
-                  candidates={optCandidates}
-                />
-              </div>
-            </section>
-          </>
+          </div>
         )}
-      </div>
+
+        {race && !pendingRace && view === "strategy" && (
+          <div className="flex flex-col gap-4">
+            <RaceSummaryPanel race={race} />
+            <StrategyBuilder race={race} onCompare={handleCompare} loading={compareLoading} />
+            {compareError && <p className="error-text">{compareError}</p>}
+            <StrategyResultsPanel results={compareResults} />
+            <FieldPanel race={race} onSimulate={handleSimulateField} loading={fieldLoading} results={fieldResults} />
+            <OptimizerPanel
+              race={race}
+              onOptimize={handleOptimize}
+              loading={optLoading}
+              error={optError}
+              recommended={optRecommended}
+              candidates={optCandidates}
+            />
+          </div>
+        )}
+      </AppShell>
     </ReplayProvider>
   );
 }

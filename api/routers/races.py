@@ -3,11 +3,41 @@ from __future__ import annotations
 import pandas as pd
 from fastapi import APIRouter, HTTPException
 
-from api.context import get_race_context
-from api.schemas.race import DriverStintOut, DriverSummaryOut, PaceModelSummaryOut, RaceSummaryOut
+from api.context import get_race_context, get_season_races
+from api.schemas.race import (
+    DriverStintOut,
+    DriverSummaryOut,
+    PaceModelSummaryOut,
+    RaceSummaryOut,
+    SeasonOut,
+    SeasonRaceOut,
+)
 from engine.strategy.field import extract_historical_strategies
 
 router = APIRouter(prefix="/races", tags=["races"])
+
+
+@router.get("/{year}", response_model=SeasonOut)
+def get_season(year: int) -> SeasonOut:
+    try:
+        races = get_season_races(year)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=404, detail=f"Could not load the {year} schedule: {exc}"
+        ) from exc
+    return SeasonOut(
+        year=year,
+        races=[
+            SeasonRaceOut(
+                round=int(r.round),
+                event_name=r.event_name,
+                location=r.location,
+                country=r.country,
+                race_date=r.race_start_utc.date().isoformat(),
+            )
+            for r in races.itertuples()
+        ],
+    )
 
 
 @router.get("/{year}/{event}", response_model=RaceSummaryOut)

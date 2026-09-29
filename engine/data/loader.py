@@ -120,6 +120,43 @@ def load_race_laps(race: RaceIdentifier) -> pd.DataFrame:
     return out.sort_values(["driver", "lap_number"]).reset_index(drop=True)
 
 
+SCHEDULE_COLUMNS = ["round", "event_name", "location", "country", "race_start_utc"]
+
+
+def raced_events(schedule: pd.DataFrame, now: pd.Timestamp) -> pd.DataFrame:
+    """Reduce a FastF1 event schedule to the races that have already started
+    by `now` (a naive UTC timestamp), in round order.
+
+    Pure so it's unit-testable without network; `load_season_races` feeds it
+    the real schedule.
+    """
+    started = schedule[schedule["Session5DateUtc"].notna() & (schedule["Session5DateUtc"] <= now)]
+    return (
+        pd.DataFrame(
+            {
+                "round": started["RoundNumber"].astype(int),
+                "event_name": started["EventName"],
+                "location": started["Location"],
+                "country": started["Country"],
+                "race_start_utc": started["Session5DateUtc"],
+            },
+            columns=SCHEDULE_COLUMNS,
+        )
+        .sort_values("round")
+        .reset_index(drop=True)
+    )
+
+
+def load_season_races(year: int) -> pd.DataFrame:
+    """List the season's Grands Prix that have been raced so far (testing
+    excluded). Columns: round, event_name, location, country, race_start_utc.
+    """
+    ensure_cache()
+    schedule = fastf1.get_event_schedule(year, include_testing=False)
+    now = pd.Timestamp.now(tz="UTC").tz_localize(None)
+    return raced_events(schedule, now)
+
+
 def load_weather(race: RaceIdentifier) -> pd.DataFrame:
     """Load weather/track-condition samples for a race session.
 
@@ -141,6 +178,20 @@ def load_weather(race: RaceIdentifier) -> pd.DataFrame:
     ).reset_index(drop=True)
 
 
+TELEMETRY_COLUMNS = [
+    "driver",
+    "lap_number",
+    "time_s",
+    "x",
+    "y",
+    "speed_kmh",
+    "distance_m",
+    "throttle_pct",
+    "brake",
+    "gear",
+]
+
+
 def _telemetry_for_one_driver(session, driver: str) -> pd.DataFrame:
     """Fetch one driver's whole-session telemetry in a single bulk call
     (`Laps.get_telemetry()`), then tag each sample with its lap number via
@@ -150,7 +201,7 @@ def _telemetry_for_one_driver(session, driver: str) -> pd.DataFrame:
     tel = drv_laps.get_telemetry()
     if tel.empty:
         return pd.DataFrame(
-            columns=["driver", "lap_number", "time_s", "x", "y", "speed_kmh", "distance_m"]
+            columns=TELEMETRY_COLUMNS
         )
 
     lap_starts = drv_laps[["LapNumber", "LapStartTime"]].dropna().sort_values("LapStartTime")
@@ -171,19 +222,24 @@ def _telemetry_for_one_driver(session, driver: str) -> pd.DataFrame:
             "y": tagged["Y"],
             "speed_kmh": tagged["Speed"],
             "distance_m": tagged["Distance"],
+            "throttle_pct": tagged["Throttle"],
+            "brake": tagged["Brake"].astype(bool),
+            "gear": tagged["nGear"],
         }
     ).dropna(subset=["lap_number"]).reset_index(drop=True)
 
 
 def load_car_telemetry(race: RaceIdentifier, driver: str | None = None) -> pd.DataFrame:
-    """Load per-lap car position/speed telemetry.
+    """Load per-lap car position/speed/driver-input telemetry.
 
     `driver=None` loads every driver (expensive — full-session telemetry, one
     bulk fetch per car); pass a driver code (e.g. "VER") to scope the fetch to
     one car, which is all a circuit-outline extraction needs.
 
     Output columns: driver, lap_number, time_s (session-relative), x, y,
-    speed_kmh, distance_m (distance traveled within the lap).
+    speed_kmh, distance_m, throttle_pct (0-100), brake (on/off), gear.
+    `distance_m` accumulates across the whole fetch, so subtract each lap's
+    minimum to get distance into the lap.
     """
     session = _load_session(race.year, race.event, telemetry=True)
     drivers = [driver] if driver is not None else sorted(session.laps["Driver"].unique())
@@ -192,7 +248,7 @@ def load_car_telemetry(race: RaceIdentifier, driver: str | None = None) -> pd.Da
     frames = [f for f in frames if not f.empty]
     if not frames:
         return pd.DataFrame(
-            columns=["driver", "lap_number", "time_s", "x", "y", "speed_kmh", "distance_m"]
+            columns=TELEMETRY_COLUMNS
         )
     return pd.concat(frames, ignore_index=True)
 

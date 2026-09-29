@@ -47,6 +47,13 @@ class TelemetryPointOut(BaseModel):
     x: float
     y: float
     speed_kmh: float
+    # Lap-relative: distance/time since this lap's first sample, so two laps
+    # (or two drivers) can be overlaid on a shared distance axis.
+    distance_m: float
+    lap_time_s: float
+    throttle_pct: float
+    brake: bool
+    gear: int
 
 
 class DriverTelemetryOut(BaseModel):

@@ -35,6 +35,16 @@ def test_health_check_does_not_need_network(client):
     assert resp.json() == {"status": "ok"}
 
 
+def test_get_season_lists_raced_grands_prix_in_round_order(client):
+    resp = client.get(f"/races/{YEAR}")
+    if resp.status_code != 200:
+        pytest.skip(f"FastF1 schedule unavailable: {resp.text}")
+    races = resp.json()["races"]
+    assert len(races) == 22  # 2023 ran 22 GPs (Imola was cancelled)
+    assert [r["round"] for r in races] == sorted(r["round"] for r in races)
+    assert any(r["event_name"] == "British Grand Prix" for r in races)
+
+
 def test_get_race_returns_full_grid(race_summary):
     assert race_summary["year"] == YEAR
     assert race_summary["total_race_laps"] > 40
@@ -198,6 +208,12 @@ def test_get_replay_telemetry_returns_points_for_a_lap(client):
     assert body["driver"] == "VER"
     assert body["lap_number"] == 5
     assert len(body["points"]) > 10
+    first, last = body["points"][0], body["points"][-1]
+    assert first["distance_m"] == 0.0
+    assert first["lap_time_s"] == 0.0
+    assert 4000 < last["distance_m"] < 7000
+    assert all(0 <= p["throttle_pct"] <= 100 for p in body["points"])
+    assert any(p["brake"] for p in body["points"])
 
 
 def test_get_weather_joins_samples_to_lap_numbers(client):

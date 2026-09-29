@@ -95,12 +95,20 @@ def get_replay_telemetry(year: int, event: str, driver: str, lap: int) -> Driver
             status_code=404, detail=f"No telemetry for {driver} on lap {lap} of {year} {event}"
         )
 
+    lap_telemetry = lap_telemetry.sort_values("time_s")
+    start_distance = lap_telemetry["distance_m"].min()
+    start_time = lap_telemetry["time_s"].min()
     points = [
         TelemetryPointOut(
             time_s=float(row.time_s),
             x=float(row.x),
             y=float(row.y),
             speed_kmh=float(row.speed_kmh),
+            distance_m=float(row.distance_m - start_distance),
+            lap_time_s=float(row.time_s - start_time),
+            throttle_pct=float(row.throttle_pct),
+            brake=bool(row.brake),
+            gear=int(row.gear),
         )
         for row in lap_telemetry.itertuples()
     ]

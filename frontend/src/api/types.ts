@@ -127,6 +127,11 @@ export interface TelemetryPoint {
   x: number;
   y: number;
   speed_kmh: number;
+  distance_m: number;
+  lap_time_s: number;
+  throttle_pct: number;
+  brake: boolean;
+  gear: number;
 }
 
 export interface DriverTelemetry {
@@ -148,4 +153,17 @@ export interface WeatherSample {
 
 export interface WeatherResponse {
   samples: WeatherSample[];
+}
+
+export interface SeasonRace {
+  round: number;
+  event_name: string;
+  location: string;
+  country: string;
+  race_date: string;
+}
+
+export interface SeasonResponse {
+  year: number;
+  races: SeasonRace[];
 }

@@ -15,7 +15,7 @@ interface Props {
   results: StrategyResult[];
 }
 
-const BAR_COLOR = "#3b82f6";
+const BAR_COLOR = "#8b5cf6";
 const FASTEST_COLOR = "#22c55e";
 
 export default function StrategyResultsPanel({ results }: Props) {

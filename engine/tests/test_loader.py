@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from engine.data.loader import clean_pace_laps, safety_car_laps
+from engine.data.loader import clean_pace_laps, raced_events, safety_car_laps
 
 COLUMNS = ["driver", "lap_number", "lap_time_s", "is_pit_lap", "is_accurate", "track_status"]
 
@@ -75,3 +75,34 @@ def test_safety_car_laps_matches_sc_and_vsc_status_codes():
 def test_safety_car_laps_excludes_green_flag():
     laps = pd.DataFrame([_row("HAM", 1, 91.0, False, True, track_status="1")])
     assert len(safety_car_laps(laps)) == 0
+
+
+def _event(round_number, name, race_start):
+    return {
+        "RoundNumber": round_number,
+        "EventName": name,
+        "Location": f"{name} town",
+        "Country": "Somewhere",
+        "Session5DateUtc": pd.Timestamp(race_start) if race_start else pd.NaT,
+    }
+
+
+def test_raced_events_keeps_only_races_already_started_in_round_order():
+    schedule = pd.DataFrame(
+        [
+            _event(3, "Third GP", "2026-03-29 05:00"),
+            _event(1, "First GP", "2026-03-08 04:00"),
+            _event(4, "Future GP", "2026-05-03 17:00"),
+            _event(2, "Cancelled GP", None),
+        ]
+    )
+    raced = raced_events(schedule, now=pd.Timestamp("2026-04-01"))
+    assert raced["event_name"].tolist() == ["First GP", "Third GP"]
+    assert raced["round"].tolist() == [1, 3]
+    assert raced.columns.tolist() == ["round", "event_name", "location", "country", "race_start_utc"]
+
+
+def test_raced_events_is_empty_before_the_season_starts():
+    schedule = pd.DataFrame([_event(1, "First GP", "2026-03-08 04:00")])
+    raced = raced_events(schedule, now=pd.Timestamp("2026-01-01"))
+    assert raced.empty

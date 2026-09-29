@@ -20,6 +20,7 @@ from engine.data.loader import (
     load_car_telemetry,
     load_race_laps,
     load_race_results,
+    load_season_races,
     load_weather,
 )
 from engine.models.pace import PaceModel, fit_pace_model
@@ -69,3 +70,9 @@ def get_weather(year: int, event: str) -> pd.DataFrame:
 @lru_cache(maxsize=32)
 def get_driver_telemetry(year: int, event: str, driver: str) -> pd.DataFrame:
     return load_car_telemetry(RaceIdentifier(year=year, event=event), driver=driver)
+
+
+# Not cached here: the current season's list grows as races happen, and
+# FastF1 already caches the schedule HTTP response on disk.
+def get_season_races(year: int) -> pd.DataFrame:
+    return load_season_races(year)

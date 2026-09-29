@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { ApiError, getCircuitOutline, getReplayFrames, getWeather } from "../api/client";
 import type { CircuitOutline, LapFrame, WeatherSample } from "../api/types";
@@ -40,23 +40,26 @@ export function ReplayProvider({
   event: string | null;
   children: ReactNode;
 }) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [circuit, setCircuit] = useState<CircuitOutline | null>(null);
-  const [frames, setFrames] = useState<LapFrame[]>([]);
-  const [weather, setWeather] = useState<WeatherSample[]>([]);
-  const [lapIndex, setLapIndexState] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
+  // Everything fetched for a race is stored together with the race it belongs
+  // to, and only exposed while that race is still the selected one -- so when
+  // the user switches races, the previous race's frames/circuit can never be
+  // rendered against the new race while its data is in flight.
+  const raceKey = year != null && event != null ? `${year}/${event}` : null;
+  const [loaded, setLoaded] = useState<{
+    key: string;
+    frames: LapFrame[];
+    circuit: CircuitOutline | null;
+    weather: WeatherSample[];
+    error: string | null;
+  } | null>(null);
+  const [lapState, setLapState] = useState({ key: raceKey, index: 0, playing: false });
   const [speedMs, setSpeedMs] = useState(800);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (year == null || event == null) return;
+    const key = `${year}/${event}`;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setIsPlaying(false);
-    setLapIndexState(0);
 
     Promise.all([
       getReplayFrames(year, event),
@@ -65,16 +68,12 @@ export function ReplayProvider({
     ])
       .then(([replay, circuitOutline, weatherResp]) => {
         if (cancelled) return;
-        setFrames(replay.frames);
-        setCircuit(circuitOutline);
-        setWeather(weatherResp.samples);
+        setLoaded({ key, frames: replay.frames, circuit: circuitOutline, weather: weatherResp.samples, error: null });
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err instanceof ApiError ? err.message : "Failed to load replay data");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        const message = err instanceof ApiError ? err.message : "Failed to load replay data";
+        setLoaded({ key, frames: [], circuit: null, weather: [], error: message });
       });
 
     return () => {
@@ -82,29 +81,51 @@ export function ReplayProvider({
     };
   }, [year, event]);
 
+  const current = loaded != null && loaded.key === raceKey ? loaded : null;
+  const loading = raceKey != null && current == null;
+  const error = current?.error ?? null;
+  const circuit = current?.circuit ?? null;
+  const frames = useMemo(() => current?.frames ?? [], [current]);
+  const weather = useMemo(() => current?.weather ?? [], [current]);
+
+  // Lap position/playback also resets per race: a lap index from the old
+  // race would otherwise carry over (and keep playing) on the new one.
+  const lapIndex = lapState.key === raceKey ? lapState.index : 0;
+  const isPlaying = lapState.key === raceKey && lapState.playing;
+  const setLapIndexState = useCallback(
+    (update: (i: number) => number) =>
+      setLapState((s) => {
+        const base = s.key === raceKey ? s : { key: raceKey, index: 0, playing: false };
+        return { ...base, index: update(base.index) };
+      }),
+    [raceKey],
+  );
+  const setIsPlaying = useCallback(
+    (playing: boolean) =>
+      setLapState((s) => ({ ...(s.key === raceKey ? s : { key: raceKey, index: 0 }), playing })),
+    [raceKey],
+  );
+
   const effectiveSpeedMs = Math.max(speedMs, MIN_LAP_MS);
 
   useEffect(() => {
     if (!isPlaying || frames.length === 0) return;
     intervalRef.current = setInterval(() => {
-      setLapIndexState((i) => {
-        if (i >= frames.length - 1) {
-          setIsPlaying(false);
-          return i;
-        }
-        return i + 1;
+      setLapState((s) => {
+        if (s.key !== raceKey) return s;
+        return s.index >= frames.length - 1 ? { ...s, playing: false } : { ...s, index: s.index + 1 };
       });
     }, effectiveSpeedMs);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [isPlaying, effectiveSpeedMs, frames.length]);
+  }, [isPlaying, effectiveSpeedMs, frames.length, raceKey]);
 
   const setLapIndex = useCallback(
     (index: number) => {
-      setLapIndexState(Math.max(0, Math.min(index, Math.max(frames.length - 1, 0))));
+      setLapIndexState(() => Math.max(0, Math.min(index, Math.max(frames.length - 1, 0))));
     },
-    [frames.length],
+    [frames.length, setLapIndexState],
   );
 
   const currentFrame = frames[lapIndex] ?? null;
