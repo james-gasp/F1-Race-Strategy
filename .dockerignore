@@ -1,0 +1,14 @@
+.git
+.github
+.venv
+.fastf1_cache
+.circuit_cache
+.pytest_cache
+.ruff_cache
+__pycache__
+*.pyc
+frontend
+.claude
+.env
+.env.*
+*.md

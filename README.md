@@ -58,6 +58,51 @@ The first request for a given race fetches and caches data from the FastF1
 API (a few seconds); subsequent requests for the same race are served from
 FastF1's on-disk cache plus an in-process fitted-model cache.
 
+## Deploying
+
+The app is two pieces hosted separately: the **backend** (FastAPI, in a
+Docker container) and the **frontend** (a static Vite build).
+
+**1. Backend on [Render](https://render.com)**
+
+1. Render dashboard → **New → Blueprint** → select this repo. It reads
+   [`render.yaml`](render.yaml): a Docker web service with a 5 GB persistent
+   disk for the FastF1 cache.
+2. When prompted, set `ALLOWED_ORIGINS` to your frontend's URL (you can
+   leave it as a placeholder and update it after step 2).
+3. Deploy, then check `https://<your-service>.onrender.com/health` returns
+   `{"status":"ok"}`.
+
+The blueprint uses the 2 GB `standard` plan: one race with telemetry loaded
+takes ~350 MB, so the 512 MB plans run out of memory on the Telemetry view.
+
+**2. Frontend on [Vercel](https://vercel.com)**
+
+1. **Add New → Project** → import this repo.
+2. Set **Root Directory** to `frontend` (Vite is auto-detected).
+3. Add the environment variable `VITE_API_BASE_URL` =
+   `https://<your-service>.onrender.com`.
+4. Deploy, then put the Vercel URL into the backend's `ALLOWED_ORIGINS`
+   on Render (comma-separate several, e.g. a custom domain too).
+
+Both redeploy automatically on every push to `main`.
+
+**Configuration**
+
+| Variable | Where | Default | Purpose |
+|---|---|---|---|
+| `ALLOWED_ORIGINS` | backend | `http://localhost:5173` | Comma-separated origins allowed to call the API (CORS) |
+| `F1_CACHE_DIR` | backend | repo's `.fastf1_cache/` + `.circuit_cache/` | Root folder for on-disk caches; point at a persistent disk |
+| `F1_MAX_CACHED_RACES` | backend | `16` | Races kept in memory; lower it on small servers |
+| `VITE_API_BASE_URL` | frontend (build time) | `http://localhost:8000` | Backend URL |
+
+To run the backend image yourself:
+
+```bash
+docker build -t f1-race-strategy-api .
+docker run -p 8000:8000 -v f1cache:/var/data f1-race-strategy-api
+```
+
 ## Testing
 
 ```bash

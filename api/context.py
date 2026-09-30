@@ -25,6 +25,7 @@ from engine.data.loader import (
 )
 from engine.models.pace import PaceModel, fit_pace_model
 from engine.models.pitloss import PitLossModel, fit_pit_loss_model
+from engine.settings import MAX_CACHED_RACES
 
 
 @dataclass(frozen=True)
@@ -40,7 +41,7 @@ class RaceContext:
         return int(self.laps["lap_number"].max())
 
 
-@lru_cache(maxsize=16)
+@lru_cache(maxsize=MAX_CACHED_RACES)
 def get_race_context(year: int, event: str) -> RaceContext:
     race = RaceIdentifier(year=year, event=event)
     laps = load_race_laps(race)
@@ -57,17 +58,17 @@ def get_race_context(year: int, event: str) -> RaceContext:
 # already depend on `get_race_context` don't pay for telemetry they don't need.
 
 
-@lru_cache(maxsize=16)
+@lru_cache(maxsize=MAX_CACHED_RACES)
 def get_circuit_outline(year: int, event: str) -> CircuitOutline:
     return load_or_build_circuit_outline(RaceIdentifier(year=year, event=event))
 
 
-@lru_cache(maxsize=16)
+@lru_cache(maxsize=MAX_CACHED_RACES)
 def get_weather(year: int, event: str) -> pd.DataFrame:
     return load_weather(RaceIdentifier(year=year, event=event))
 
 
-@lru_cache(maxsize=32)
+@lru_cache(maxsize=MAX_CACHED_RACES * 2)
 def get_driver_telemetry(year: int, event: str, driver: str) -> pd.DataFrame:
     return load_car_telemetry(RaceIdentifier(year=year, event=event), driver=driver)
 

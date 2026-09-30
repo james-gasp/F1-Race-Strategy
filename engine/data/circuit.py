@@ -17,8 +17,9 @@ import numpy as np
 import pandas as pd
 
 from engine.data.loader import RaceIdentifier, load_car_telemetry, load_race_laps
+from engine.settings import CIRCUIT_CACHE_DIR
 
-DEFAULT_CIRCUIT_CACHE_DIR = Path(__file__).resolve().parents[2] / ".circuit_cache"
+DEFAULT_CIRCUIT_CACHE_DIR = CIRCUIT_CACHE_DIR
 
 
 @dataclass(frozen=True)

@@ -12,7 +12,9 @@ import type {
   WeatherResponse,
 } from "./types";
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+// Trailing slash stripped so "https://api.example.com/" in the host's
+// settings doesn't produce "//races/..." request paths.
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000").replace(/\/+$/, "");
 
 export class ApiError extends Error {
   status: number;

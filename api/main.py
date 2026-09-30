@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.routers import races, replay, strategy
+from api.settings import ALLOWED_ORIGINS
 
 app = FastAPI(
     title="F1 Race Strategy Simulator API",
@@ -13,7 +14,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Vite dev server, added ahead of the Phase 3 frontend
+    allow_origins=ALLOWED_ORIGINS,  # set via the ALLOWED_ORIGINS env var in production
     allow_methods=["*"],
     allow_headers=["*"],
 )

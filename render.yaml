@@ -1,0 +1,26 @@
+# Render Blueprint for the backend API.
+# Render dashboard -> New -> Blueprint -> pick this repo. It will ask for
+# ALLOWED_ORIGINS (your deployed frontend URL, e.g. https://f1-race-strategy.vercel.app).
+services:
+  - type: web
+    name: f1-race-strategy-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    # 2 GB RAM. Loading one race's telemetry takes ~350 MB on top of the app,
+    # so the 512 MB "starter" plan runs out of memory on the Telemetry view.
+    plan: standard
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: F1_CACHE_DIR
+        value: /var/data
+      - key: F1_MAX_CACHED_RACES
+        value: "3"
+    # Keeps downloaded FastF1 data across deploys/restarts, so each race is
+    # only slow the first time it's ever opened.
+    disk:
+      name: f1-cache
+      mountPath: /var/data
+      sizeGB: 5

@@ -14,7 +14,9 @@ from pathlib import Path
 import fastf1
 import pandas as pd
 
-DEFAULT_CACHE_DIR = Path(__file__).resolve().parents[2] / ".fastf1_cache"
+from engine.settings import FASTF1_CACHE_DIR, MAX_CACHED_RACES
+
+DEFAULT_CACHE_DIR = FASTF1_CACHE_DIR
 
 _cache_enabled = False
 
@@ -35,7 +37,8 @@ class RaceIdentifier:
     event: str  # circuit/event name or round number, anything fastf1.get_session accepts
 
 
-@lru_cache(maxsize=16)
+# Up to three entries per race (laps-only / +telemetry / +weather).
+@lru_cache(maxsize=MAX_CACHED_RACES * 3)
 def _load_session(year: int, event: str, *, telemetry: bool = False, weather: bool = False):
     """Fetch + process a race session once per process, shared by
     `load_race_laps` and `load_race_results` so requesting both for the same
