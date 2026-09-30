@@ -53,12 +53,50 @@ jobs:
       - name: Typecheck + build
         run: npm run build
 
-  # Deploys build from this Dockerfile (Google Cloud Run / Render), so
-  # make sure it still builds.
+  # Pull requests: make sure the Dockerfile still builds. (On main, the deploy
+  # job below builds the same image, so it isn't built twice.)
   docker:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Build app image
         run: docker build -t f1-race-strategy .
+
+  # Pushes to main: once lint/tests/build pass, build the image and roll it out
+  # to Cloud Run. The service keeps its settings (race-data bucket, memory,
+  # env vars); only the image changes. Signs in to Google Cloud keylessly via
+  # Workload Identity Federation, which only trusts this repo's main branch.
+  deploy:
+    needs: [backend, frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: deploy-cloud-run
+      cancel-in-progress: false
+    env:
+      REGION: us-central1
+      SERVICE: f1-race-strategy
+      IMAGE: us-central1-docker.pkg.dev/f1-race-strategy/cloud-run-source-deploy/f1-race-strategy:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/516639387239/locations/global/workloadIdentityPools/github/providers/github-oidc
+          service_account: github-deployer@f1-race-strategy.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build and push image
+        run: |
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Deploy to Cloud Run
+        run: gcloud run deploy "$SERVICE" --image "$IMAGE" --region "$REGION" --quiet
