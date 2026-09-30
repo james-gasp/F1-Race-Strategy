@@ -53,12 +53,12 @@ jobs:
       - name: Typecheck + build
         run: npm run build
 
-  # The backend deploys from this Dockerfile (see render.yaml), so make sure
-  # it still builds.
+  # Deploys build from this Dockerfile (Hugging Face Spaces / Render), so
+  # make sure it still builds.
   docker:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build backend image
-        run: docker build -t f1-race-strategy-api .
+      - name: Build app image
+        run: docker build -t f1-race-strategy .

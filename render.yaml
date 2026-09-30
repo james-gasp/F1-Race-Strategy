@@ -1,6 +1,7 @@
-# Render Blueprint for the backend API.
-# Render dashboard -> New -> Blueprint -> pick this repo. It will ask for
-# ALLOWED_ORIGINS (your deployed frontend URL, e.g. https://f1-race-strategy.vercel.app).
+# Render Blueprint (paid; see README for the free Hugging Face option).
+# Render dashboard -> New -> Blueprint -> pick this repo. The container serves
+# both the API and the website. ALLOWED_ORIGINS is only needed if you also host
+# the frontend elsewhere (e.g. Vercel); otherwise leave it blank.
 services:
   - type: web
     name: f1-race-strategy-api

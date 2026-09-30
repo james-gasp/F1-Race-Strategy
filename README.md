@@ -60,47 +60,55 @@ FastF1's on-disk cache plus an in-process fitted-model cache.
 
 ## Deploying
 
-The app is two pieces hosted separately: the **backend** (FastAPI, in a
-Docker container) and the **frontend** (a static Vite build).
+The [`Dockerfile`](Dockerfile) builds the whole app into one container: the
+FastAPI backend also serves the built website, so it runs from a single URL.
 
-**1. Backend on [Render](https://render.com)**
+### Free: Hugging Face Spaces
 
-1. Render dashboard → **New → Blueprint** → select this repo. It reads
-   [`render.yaml`](render.yaml): a Docker web service with a 5 GB persistent
-   disk for the FastF1 cache.
-2. When prompted, set `ALLOWED_ORIGINS` to your frontend's URL (you can
-   leave it as a placeholder and update it after step 2).
-3. Deploy, then check `https://<your-service>.onrender.com/health` returns
-   `{"status":"ok"}`.
+Hugging Face's free Docker Spaces have enough memory for FastF1 telemetry (one
+race with telemetry loaded takes ~350 MB) and need no credit card. A GitHub
+Action ([`deploy-huggingface.yml`](.github/workflows/deploy-huggingface.yml))
+pushes the app to your Space on every push to `main`.
 
-The blueprint uses the 2 GB `standard` plan: one race with telemetry loaded
-takes ~350 MB, so the 512 MB plans run out of memory on the Telemetry view.
+1. Sign up at [huggingface.co](https://huggingface.co) and create a Space:
+   **New Space** → any name → SDK **Docker** → **Blank** → **Public** →
+   free **CPU basic** hardware.
+2. Create a token at **Settings → Access Tokens** with **Write** access.
+3. In this GitHub repo, **Settings → Secrets and variables → Actions**:
+   - **Secrets** tab → `HF_TOKEN` = the token
+   - **Variables** tab → `HF_SPACE` = `<your-hf-username>/<space-name>`
+4. **Actions** tab → **Deploy to Hugging Face Spaces** → **Run workflow**
+   (or just push to `main`).
 
-**2. Frontend on [Vercel](https://vercel.com)**
+The Space builds for a few minutes, then the app is live at
+`https://<your-hf-username>-<space-name>.hf.space`.
 
-1. **Add New → Project** → import this repo.
-2. Set **Root Directory** to `frontend` (Vite is auto-detected).
-3. Add the environment variable `VITE_API_BASE_URL` =
-   `https://<your-service>.onrender.com`.
-4. Deploy, then put the Vercel URL into the backend's `ALLOWED_ORIGINS`
-   on Render (comma-separate several, e.g. a custom domain too).
+Free-tier caveats: the Space sleeps after ~48 hours without visitors (the next
+visit wakes it in about a minute), and its disk isn't persistent, so downloaded
+race data is re-fetched from FastF1 after a restart.
 
-Both redeploy automatically on every push to `main`.
+### Paid alternative: Render
 
-**Configuration**
+[`render.yaml`](render.yaml) is a Render Blueprint for the same container with
+a persistent disk for the FastF1 cache (**New → Blueprint** → select this
+repo). It needs the 2 GB `standard` plan; the 512 MB plans run out of memory
+on the Telemetry view.
 
-| Variable | Where | Default | Purpose |
-|---|---|---|---|
-| `ALLOWED_ORIGINS` | backend | `http://localhost:5173` | Comma-separated origins allowed to call the API (CORS) |
-| `F1_CACHE_DIR` | backend | repo's `.fastf1_cache/` + `.circuit_cache/` | Root folder for on-disk caches; point at a persistent disk |
-| `F1_MAX_CACHED_RACES` | backend | `16` | Races kept in memory; lower it on small servers |
-| `VITE_API_BASE_URL` | frontend (build time) | `http://localhost:8000` | Backend URL |
+### Configuration
 
-To run the backend image yourself:
+| Variable | Default | Purpose |
+|---|---|---|
+| `F1_CACHE_DIR` | repo's `.fastf1_cache/` + `.circuit_cache/` (image: `/var/data`) | Root folder for on-disk caches |
+| `F1_MAX_CACHED_RACES` | `16` | Races kept in memory; lower it on small servers |
+| `FRONTEND_DIST_DIR` | unset (image: built site) | Serve a built frontend from the API at `/` |
+| `ALLOWED_ORIGINS` | `http://localhost:5173` | CORS origins, only needed if the frontend is hosted separately |
+| `VITE_API_BASE_URL` | `http://localhost:8000` | Frontend build-time API URL (`/` = same origin) |
+
+To run the production image yourself:
 
 ```bash
-docker build -t f1-race-strategy-api .
-docker run -p 8000:8000 -v f1cache:/var/data f1-race-strategy-api
+docker build -t f1-race-strategy .
+docker run -p 7860:7860 f1-race-strategy
 ```
 
 ## Testing

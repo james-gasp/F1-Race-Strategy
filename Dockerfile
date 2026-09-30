@@ -1,6 +1,18 @@
-# Backend image: FastAPI + FastF1 strategy engine.
-# Build:  docker build -t f1-race-strategy-api .
-# Run:    docker run -p 8000:8000 -v f1cache:/var/data f1-race-strategy-api
+# Full app image: the FastAPI + FastF1 backend, also serving the built website,
+# so everything runs from one server and one URL.
+# Build:  docker build -t f1-race-strategy .
+# Run:    docker run -p 7860:7860 f1-race-strategy   ->  http://localhost:7860
+
+# ---- Frontend build ----
+FROM node:20-slim AS frontend
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend ./
+# "/" = call the API on the same origin the page was loaded from.
+RUN VITE_API_BASE_URL=/ npm run build
+
+# ---- Backend ----
 FROM python:3.12-slim
 
 COPY --from=ghcr.io/astral-sh/uv:0.12 /uv /usr/local/bin/uv
@@ -14,14 +26,23 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 COPY api ./api
 COPY engine ./engine
+COPY --from=frontend /frontend/dist ./frontend_dist
+
+# Hugging Face Spaces runs containers as uid 1000, so the cache folder must be
+# writable by that user (on Render a mounted disk replaces it).
+RUN useradd --create-home --uid 1000 app \
+    && mkdir -p /var/data \
+    && chown -R app:app /var/data
+USER app
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     F1_CACHE_DIR=/var/data \
-    PORT=8000
+    FRONTEND_DIST_DIR=/app/frontend_dist \
+    PORT=7860
 
-EXPOSE 8000
+EXPOSE 7860
 
 # One worker: each worker keeps its own in-memory race cache, and a race with
-# telemetry loaded costs ~150-350 MB. Hosts like Render inject $PORT.
+# telemetry loaded costs ~150-350 MB. Render injects its own $PORT.
 CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port ${PORT} --workers 1"]
