@@ -7,6 +7,9 @@ produce finishing-position probabilities and a live pit-stop optimizer.
 
 Planning on updating this project to add more features and more realistic.
 
+You can check it out here: [F1 Race Strategy](https://f1-race-strategy-516639387239.us-central1.run.app)
+
+
 ## How the model works
 
 1. **Pace model** — for each race, an OLS fit separates four effects from
