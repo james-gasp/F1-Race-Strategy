@@ -1,4 +1,4 @@
-# Render Blueprint (paid; see README for the free Hugging Face option).
+# Render Blueprint (paid alternative; see README for Google Cloud Run).
 # Render dashboard -> New -> Blueprint -> pick this repo. The container serves
 # both the API and the website. ALLOWED_ORIGINS is only needed if you also host
 # the frontend elsewhere (e.g. Vercel); otherwise leave it blank.

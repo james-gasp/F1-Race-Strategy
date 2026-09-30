@@ -31,7 +31,7 @@ def health() -> dict[str, str]:
 
 
 # Serve the built website from the same server when configured (single-URL
-# deploys, e.g. Hugging Face Spaces). Mounted last so every API route above
+# deploys, e.g. Google Cloud Run). Mounted last so every API route above
 # takes precedence over the static catch-all at `/`.
 if FRONTEND_DIST_DIR is not None:
     app.mount("/", StaticFiles(directory=FRONTEND_DIST_DIR, html=True), name="frontend")

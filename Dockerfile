@@ -1,7 +1,7 @@
 # Full app image: the FastAPI + FastF1 backend, also serving the built website,
 # so everything runs from one server and one URL.
 # Build:  docker build -t f1-race-strategy .
-# Run:    docker run -p 7860:7860 f1-race-strategy   ->  http://localhost:7860
+# Run:    docker run -p 8080:8080 f1-race-strategy   ->  http://localhost:8080
 
 # ---- Frontend build ----
 FROM node:20-slim AS frontend
@@ -28,8 +28,8 @@ COPY api ./api
 COPY engine ./engine
 COPY --from=frontend /frontend/dist ./frontend_dist
 
-# Hugging Face Spaces runs containers as uid 1000, so the cache folder must be
-# writable by that user (on Render a mounted disk replaces it).
+# Run as an unprivileged user; the cache folder must be writable by it (on
+# Render a mounted disk replaces it).
 RUN useradd --create-home --uid 1000 app \
     && mkdir -p /var/data \
     && chown -R app:app /var/data
@@ -39,10 +39,10 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     F1_CACHE_DIR=/var/data \
     FRONTEND_DIST_DIR=/app/frontend_dist \
-    PORT=7860
+    PORT=8080
 
-EXPOSE 7860
+EXPOSE 8080
 
 # One worker: each worker keeps its own in-memory race cache, and a race with
-# telemetry loaded costs ~150-350 MB. Render injects its own $PORT.
+# telemetry loaded costs ~150-350 MB. Cloud Run / Render inject their own $PORT.
 CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port ${PORT} --workers 1"]

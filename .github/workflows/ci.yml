@@ -53,7 +53,7 @@ jobs:
       - name: Typecheck + build
         run: npm run build
 
-  # Deploys build from this Dockerfile (Hugging Face Spaces / Render), so
+  # Deploys build from this Dockerfile (Google Cloud Run / Render), so
   # make sure it still builds.
   docker:
     runs-on: ubuntu-latest
