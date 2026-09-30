@@ -159,6 +159,9 @@ body {
 .rail {
   grid-area: rail;
   position: sticky;
+  /* Above the page content so the hover labels aren't drawn underneath it
+     (but below the sticky top bar). */
+  z-index: 15;
   top: 56px;
   height: calc(100vh - 56px);
   display: flex;

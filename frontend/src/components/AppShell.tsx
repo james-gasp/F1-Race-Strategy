@@ -127,7 +127,6 @@ export default function AppShell({
             className={`rail-button${view === n.view ? " is-active" : ""}`}
             onClick={() => onView(n.view)}
             disabled={!race}
-            title={n.label}
             aria-label={n.label}
           >
             {ICONS[n.view]}

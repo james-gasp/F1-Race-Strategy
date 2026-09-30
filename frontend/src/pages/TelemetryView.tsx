@@ -173,7 +173,7 @@ function Traces({
       <TraceChart {...common} label="Delta" unit="s" series={series.delta} tint={LANES.delta.tint} height={130} zeroLine format={fmtDelta} />
       <TraceChart {...common} label="Speed" unit="km/h" series={series.speed} tint={LANES.speed.tint} height={190} format={(v) => v.toFixed(0)} />
       <TraceChart {...common} label="Throttle" unit="%" series={series.throttle} tint={LANES.throttle.tint} height={130} domain={[-5, 108]} ticks={[0, 50, 100]} format={(v) => `${v.toFixed(0)}`} />
-      <TraceChart {...common} label="Brake" series={series.brake} tint={LANES.brake.tint} height={100} domain={[-12, 112]} ticks={[0, 100]} format={(v) => (v > 50 ? "ON" : "OFF")} />
+      <TraceChart {...common} label="Brake" unit="% (est.)" series={series.brake} tint={LANES.brake.tint} height={120} domain={[-5, 108]} ticks={[0, 50, 100]} format={(v) => `${v.toFixed(0)}`} />
       <TraceChart {...common} label="Gear" series={series.gear} tint={LANES.gear.tint} height={110} domain={[0.5, 8.5]} ticks={[2, 4, 6, 8]} format={(v) => v.toFixed(0)} showAxis />
     </>
   );
@@ -514,7 +514,7 @@ function LiveValues({ comparison: c, cursor }: { comparison: Comparison | null; 
   const rows = [
     { icon: "◷", label: "Speed", lane: LANES.speed.color, a: c?.lap.speed[i], b: c?.ref.speed[i], f: (v: number) => v.toFixed(1) },
     { icon: "▲", label: "Throttle", lane: LANES.throttle.color, a: c?.lap.throttle[i], b: c?.ref.throttle[i], f: (v: number) => `${v.toFixed(0)}%` },
-    { icon: "■", label: "Brake", lane: LANES.brake.color, a: c?.lap.brake[i], b: c?.ref.brake[i], f: (v: number) => (v > 50 ? "ON" : "OFF") },
+    { icon: "■", label: "Brake (est.)", lane: LANES.brake.color, a: c?.lap.brake[i], b: c?.ref.brake[i], f: (v: number) => `${v.toFixed(0)}%` },
     { icon: "⚙", label: "Gear", lane: LANES.gear.color, a: c?.lap.gear[i], b: c?.ref.gear[i], f: (v: number) => v.toFixed(0) },
   ];
   return (

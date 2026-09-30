@@ -17,6 +17,7 @@ export interface ResampledLap {
   time: number[];
   speed: number[];
   throttle: number[];
+  // Estimated brake effort, 0-100 (see `estimateBrakeEffort`); 0 when off.
   brake: number[];
   gear: number[];
   x: number[];
@@ -70,6 +71,44 @@ function resample(points: TelemetryPoint[], grid: number[]): ResampledLap {
   };
 }
 
+const G = 9.81;
+// Half-width, in grid points, of the window deceleration is measured over
+// (3 x 5 m either side): wide enough to smooth out the ~4 Hz speed samples,
+// narrow enough to keep short braking zones.
+const DECEL_HALF_WINDOW = 3;
+
+// Deceleration in g at each grid point, from the change in speed over time.
+function decelerationG(lap: ResampledLap): number[] {
+  const n = lap.speed.length;
+  return lap.speed.map((_, i) => {
+    const a = Math.max(0, i - DECEL_HALF_WINDOW);
+    const b = Math.min(n - 1, i + DECEL_HALF_WINDOW);
+    const dt = lap.time[b] - lap.time[a];
+    if (dt <= 0) return 0;
+    const dv = (lap.speed[b] - lap.speed[a]) / 3.6; // km/h -> m/s
+    return Math.max(0, -dv / dt / G);
+  });
+}
+
+// F1's data only says whether the brake is on, not how hard it's pressed, so
+// brake effort is estimated from how hard the car decelerates while it's on,
+// as a percentage of the hardest braking in either lap. Shared scaling keeps
+// the two laps comparable: 100% is the heaviest stop of the pair.
+function estimateBrakeEffort(lap: ResampledLap, ref: ResampledLap): [number[], number[]] {
+  const lapDecel = decelerationG(lap);
+  const refDecel = decelerationG(ref);
+  let peak = 0;
+  lapDecel.forEach((d, i) => {
+    if (lap.brake[i] > 0) peak = Math.max(peak, d);
+  });
+  refDecel.forEach((d, i) => {
+    if (ref.brake[i] > 0) peak = Math.max(peak, d);
+  });
+  const effort = (decel: number[], on: number[]) =>
+    decel.map((d, i) => (on[i] > 0 && peak > 0 ? Math.min(100, (d / peak) * 100) : 0));
+  return [effort(lapDecel, lap.brake), effort(refDecel, ref.brake)];
+}
+
 export function buildComparison(lap: TelemetryPoint[], ref: TelemetryPoint[]): Comparison | null {
   if (lap.length < 2 || ref.length < 2) return null;
   const maxD = Math.min(
@@ -80,6 +119,7 @@ export function buildComparison(lap: TelemetryPoint[], ref: TelemetryPoint[]): C
   for (let g = 0; g <= maxD; g += GRID_STEP_M) distance.push(g);
   const l = resample(lap, distance);
   const r = resample(ref, distance);
+  [l.brake, r.brake] = estimateBrakeEffort(l, r);
   return { distance, lap: l, ref: r, delta: l.time.map((t, i) => t - r.time[i]) };
 }
 
