@@ -16,6 +16,7 @@ import pandas as pd
 from engine.data.circuit import CircuitOutline, load_or_build_circuit_outline
 from engine.data.loader import (
     RaceIdentifier,
+    available_years,
     clean_pace_laps,
     load_car_telemetry,
     load_race_laps,
@@ -77,3 +78,7 @@ def get_driver_telemetry(year: int, event: str, driver: str) -> pd.DataFrame:
 # FastF1 already caches the schedule HTTP response on disk.
 def get_season_races(year: int) -> pd.DataFrame:
     return load_season_races(year)
+
+
+def get_available_years() -> list[int]:
+    return available_years()

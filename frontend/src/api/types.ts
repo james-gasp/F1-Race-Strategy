@@ -161,6 +161,11 @@ export interface SeasonRace {
   location: string;
   country: string;
   race_date: string;
+  downloaded: boolean;
+}
+
+export interface SeasonsResponse {
+  years: number[];
 }
 
 export interface SeasonResponse {

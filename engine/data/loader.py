@@ -14,7 +14,12 @@ from pathlib import Path
 import fastf1
 import pandas as pd
 
-from engine.settings import FASTF1_CACHE_DIR, MAX_CACHED_RACES
+from engine.settings import (
+    DOWNLOADED_RACES_ONLY,
+    FASTF1_CACHE_DIR,
+    MAX_CACHED_RACES,
+    RACE_DATA_DIR,
+)
 
 DEFAULT_CACHE_DIR = FASTF1_CACHE_DIR
 
@@ -50,6 +55,7 @@ def _load_session(year: int, event: str, *, telemetry: bool = False, weather: bo
     path and don't pay for telemetry they never asked for.
     """
     ensure_cache()
+    link_race_data(year)
     session = fastf1.get_session(year, event, "R")
     session.load(telemetry=telemetry, weather=weather, messages=False)
     return session
@@ -123,7 +129,10 @@ def load_race_laps(race: RaceIdentifier) -> pd.DataFrame:
     return out.sort_values(["driver", "lap_number"]).reset_index(drop=True)
 
 
-SCHEDULE_COLUMNS = ["round", "event_name", "location", "country", "race_start_utc"]
+# First season FastF1 has full timing + telemetry for.
+FIRST_YEAR = 2018
+
+SCHEDULE_COLUMNS = ["round", "event_name", "location", "country", "event_date", "race_start_utc"]
 
 
 def raced_events(schedule: pd.DataFrame, now: pd.Timestamp) -> pd.DataFrame:
@@ -141,6 +150,7 @@ def raced_events(schedule: pd.DataFrame, now: pd.Timestamp) -> pd.DataFrame:
                 "event_name": started["EventName"],
                 "location": started["Location"],
                 "country": started["Country"],
+                "event_date": started["EventDate"],
                 "race_start_utc": started["Session5DateUtc"],
             },
             columns=SCHEDULE_COLUMNS,
@@ -150,14 +160,93 @@ def raced_events(schedule: pd.DataFrame, now: pd.Timestamp) -> pd.DataFrame:
     )
 
 
+def race_folder_name(event_date: pd.Timestamp, event_name: str) -> str:
+    """FastF1's cache folder for a race weekend, e.g. "2023-07-09_British_Grand_Prix"."""
+    return f"{event_date:%Y-%m-%d}_{event_name.replace(' ', '_')}"
+
+
+def _data_roots(cache_dir: Path, race_data_dir: Path | None) -> list[Path]:
+    return [cache_dir] + ([race_data_dir] if race_data_dir is not None else [])
+
+
+def is_race_downloaded(
+    year: int,
+    folder: str,
+    cache_dir: Path = DEFAULT_CACHE_DIR,
+    race_data_dir: Path | None = RACE_DATA_DIR,
+) -> bool:
+    """Whether a race's telemetry is on disk -- the largest, last piece
+    `download_races` fetches, so its presence means the race is complete."""
+    return any(
+        any((root / str(year) / folder).glob("*_Race/car_data.ff1pkl"))
+        for root in _data_roots(cache_dir, race_data_dir)
+    )
+
+
+def link_race_data(
+    year: int,
+    cache_dir: Path = DEFAULT_CACHE_DIR,
+    race_data_dir: Path | None = RACE_DATA_DIR,
+) -> None:
+    """Symlink each pre-downloaded race folder for `year` into FastF1's cache,
+    so FastF1 finds it there and never asks the live-timing server.
+
+    Linking (rather than pointing FastF1's cache at `race_data_dir`) keeps
+    FastF1's own writable files, like its SQLite HTTP cache, on local disk
+    while the race data itself can stay on read-only storage.
+    """
+    if race_data_dir is None:
+        return
+    source_year = race_data_dir / str(year)
+    if not source_year.is_dir():
+        return
+    target_year = cache_dir / str(year)
+    target_year.mkdir(parents=True, exist_ok=True)
+    for source in source_year.iterdir():
+        target = target_year / source.name
+        if source.is_dir() and not target.exists() and not target.is_symlink():
+            target.symlink_to(source, target_is_directory=True)
+
+
 def load_season_races(year: int) -> pd.DataFrame:
     """List the season's Grands Prix that have been raced so far (testing
-    excluded). Columns: round, event_name, location, country, race_start_utc.
+    excluded). Columns: round, event_name, location, country, event_date,
+    race_start_utc, downloaded. With F1_DOWNLOADED_RACES_ONLY, only the
+    downloaded races are returned.
     """
     ensure_cache()
+    link_race_data(year)
     schedule = fastf1.get_event_schedule(year, include_testing=False)
     now = pd.Timestamp.now(tz="UTC").tz_localize(None)
-    return raced_events(schedule, now)
+    races = raced_events(schedule, now)
+    races["downloaded"] = [
+        is_race_downloaded(year, race_folder_name(r.event_date, r.event_name))
+        for r in races.itertuples()
+    ]
+    if DOWNLOADED_RACES_ONLY:
+        races = races[races["downloaded"]].reset_index(drop=True)
+    return races
+
+
+def available_years(
+    downloaded_only: bool = DOWNLOADED_RACES_ONLY,
+    cache_dir: Path = DEFAULT_CACHE_DIR,
+    race_data_dir: Path | None = RACE_DATA_DIR,
+    today: pd.Timestamp | None = None,
+) -> list[int]:
+    """Seasons to offer, newest first: every season FastF1 covers, or -- with
+    `downloaded_only` -- just those with at least one downloaded race."""
+    this_year = (today or pd.Timestamp.now(tz="UTC")).year
+    if not downloaded_only:
+        return list(range(this_year, FIRST_YEAR - 1, -1))
+    years = {
+        int(year_dir.name)
+        for root in _data_roots(cache_dir, race_data_dir)
+        if root.is_dir()
+        for year_dir in root.iterdir()
+        if year_dir.name.isdigit() and any(year_dir.glob("*/*_Race/car_data.ff1pkl"))
+    }
+    return sorted(years, reverse=True)
 
 
 def load_weather(race: RaceIdentifier) -> pd.DataFrame:

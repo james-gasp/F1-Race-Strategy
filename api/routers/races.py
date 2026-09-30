@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 from fastapi import APIRouter, HTTPException
 
-from api.context import get_race_context, get_season_races
+from api.context import get_available_years, get_race_context, get_season_races
 from api.schemas.race import (
     DriverStintOut,
     DriverSummaryOut,
@@ -11,10 +11,16 @@ from api.schemas.race import (
     RaceSummaryOut,
     SeasonOut,
     SeasonRaceOut,
+    SeasonsOut,
 )
 from engine.strategy.field import extract_historical_strategies
 
 router = APIRouter(prefix="/races", tags=["races"])
+
+
+@router.get("", response_model=SeasonsOut)
+def get_seasons() -> SeasonsOut:
+    return SeasonsOut(years=get_available_years())
 
 
 @router.get("/{year}", response_model=SeasonOut)
@@ -34,6 +40,7 @@ def get_season(year: int) -> SeasonOut:
                 location=r.location,
                 country=r.country,
                 race_date=r.race_start_utc.date().isoformat(),
+                downloaded=bool(r.downloaded),
             )
             for r in races.itertuples()
         ],

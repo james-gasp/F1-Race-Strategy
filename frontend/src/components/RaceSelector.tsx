@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ApiError, getSeason } from "../api/client";
+import { ApiError, getSeason, getSeasons } from "../api/client";
 import type { SeasonRace } from "../api/types";
 
 interface Props {
@@ -10,10 +10,23 @@ interface Props {
   currentEvent?: string;
 }
 
-// FastF1 has full timing + telemetry from 2018 onwards.
+// Fallback if the server's season list can't be fetched: FastF1 has full
+// timing + telemetry from 2018 onwards.
 const FIRST_YEAR = 2018;
 const THIS_YEAR = new Date().getFullYear();
-const YEARS = Array.from({ length: THIS_YEAR - FIRST_YEAR + 1 }, (_, i) => THIS_YEAR - i);
+const ALL_YEARS = Array.from({ length: THIS_YEAR - FIRST_YEAR + 1 }, (_, i) => THIS_YEAR - i);
+
+// A deployed server may only offer the seasons it has race data for.
+let yearsPromise: Promise<number[]> | null = null;
+function fetchYears(): Promise<number[]> {
+  yearsPromise ??= getSeasons()
+    .then((s) => s.years)
+    .catch(() => {
+      yearsPromise = null;
+      return ALL_YEARS;
+    });
+  return yearsPromise;
+}
 
 // Schedules don't change within a page session (bar the current season
 // gaining a race), so fetch each year once.
@@ -30,10 +43,24 @@ function fetchSeason(year: number): Promise<SeasonRace[]> {
 }
 
 export default function RaceSelector({ onLoad, loading, currentYear, currentEvent }: Props) {
+  const [years, setYears] = useState<number[] | null>(null);
   const [year, setYear] = useState(currentYear ?? THIS_YEAR - 1);
   const [season, setSeason] = useState<{ year: number; races: SeasonRace[] } | null>(null);
   const [seasonError, setSeasonError] = useState<{ year: number; message: string } | null>(null);
   const [event, setEvent] = useState<string>(currentEvent ?? "");
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchYears().then((ys) => {
+      if (cancelled) return;
+      setYears(ys);
+      // Open on the newest season offered unless it already has a valid pick.
+      setYear((y) => (ys.includes(y) || ys.length === 0 ? y : ys[0]));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,8 +92,9 @@ export default function RaceSelector({ onLoad, loading, currentYear, currentEven
       <div className="row">
         <label>
           Season
-          <select value={year} onChange={(e) => setYear(Number(e.target.value))} disabled={loading}>
-            {YEARS.map((y) => (
+          <select value={year} onChange={(e) => setYear(Number(e.target.value))} disabled={loading || !years}>
+            {!years && <option value={year}>{year}</option>}
+            {years?.map((y) => (
               <option key={y} value={y}>
                 {y}
               </option>
@@ -82,7 +110,7 @@ export default function RaceSelector({ onLoad, loading, currentYear, currentEven
             className="w-full"
           >
             {seasonLoading && <option>Loading schedule…</option>}
-            {races?.length === 0 && <option>No races run yet</option>}
+            {races?.length === 0 && <option>No races available</option>}
             {races?.map((r) => (
               <option key={r.round} value={r.event_name}>
                 R{r.round} · {r.event_name} — {r.location}

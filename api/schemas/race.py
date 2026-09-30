@@ -42,6 +42,11 @@ class SeasonRaceOut(BaseModel):
     location: str
     country: str
     race_date: str  # ISO date (UTC) of the race start
+    downloaded: bool  # race data already on disk (loads fast; works offline)
+
+
+class SeasonsOut(BaseModel):
+    years: list[int]  # newest first
 
 
 class SeasonOut(BaseModel):
